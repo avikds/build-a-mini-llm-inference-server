@@ -1156,8 +1156,133 @@ def submit_request(server_state, prompt, max_new_tokens, priority, vocab):
 
     return request_id
 
-# Step 44 - drive_until_complete (not yet solved)
-# TODO: implement
+# Step 44 - drive_until_complete
+def drive_until_complete(
+    server_state,
+    params,
+    allocator,
+    sampling_config,
+    vocab,
+    max_steps,
+):
+    """Drive the server scheduler until requests complete or max_steps is reached."""
+    # Ensure the canonical server-state containers exist.
+    server_state.setdefault("waiting_heap", [])
+    server_state.setdefault("running", [])
+    server_state.setdefault("completed", {})
+    server_state.setdefault("streams", {})
+
+    # Nothing to do.
+    if max_steps <= 0:
+        return []
+
+    chunks = []
+
+    for _ in range(max_steps):
+        # Admit waiting requests and enforce the running cap.
+        max_running = server_state.get(
+            "max_running",
+            len(server_state["waiting_heap"]) + len(server_state["running"]) or 1,
+        )
+
+        block_size = allocator.get(
+            "block_size",
+            1,
+        )
+
+        schedule = schedule_step(
+            server_state["waiting_heap"],
+            server_state["running"],
+            allocator,
+            block_size,
+            max_running,
+        )
+
+        server_state["running"] = schedule["running"]
+        newly_admitted = schedule["newly_admitted"]
+
+        # Initialize newly admitted sequences.
+        for request in newly_admitted:
+            request_id = request["request_id"]
+
+            prompt_ids = request.get(
+                "prompt_token_ids",
+                request.get("prompt_ids", []),
+            )
+
+            # If the allocator blocks were reserved by select_admissions,
+            # recreate the sequence state for subsequent decode steps.
+            logits, cache = model_prefill(
+                prompt_ids,
+                params,
+            )
+
+            server_state["running"].append({
+                "request_id": request_id,
+                "token_ids": list(prompt_ids),
+                "generated": [],
+                "block_ids": list(
+                    allocator.get("seq_tables", {}).get(request_id, [])
+                ),
+                "prompt_token_ids": list(prompt_ids),
+                "max_new_tokens": request["max_new_tokens"],
+                "priority": request.get("priority", 0),
+                "last_logits": logits,
+                "cache": cache,
+                "done": request["max_new_tokens"] <= 0,
+            })
+
+        if not server_state["running"]:
+            if not server_state["waiting_heap"]:
+                break
+            continue
+
+        # Advance the active sequences.
+        config = dict(sampling_config)
+        if "rng" not in config:
+            import numpy as np
+            config["rng"] = np.random.default_rng()
+
+        continuous_batch_step(
+            params,
+            server_state["running"],
+            allocator,
+            config,
+        )
+
+        # Retire finished sequences and emit their results.
+        survivors = []
+
+        for seq in server_state["running"]:
+            if seq["done"]:
+                request_id = seq["request_id"]
+                output_ids = list(seq["generated"])
+
+                server_state["completed"][request_id] = output_ids
+
+                free_sequence_blocks(
+                    allocator,
+                    request_id,
+                )
+            else:
+                survivors.append(seq)
+
+        server_state["running"] = survivors
+
+    # Return completion chunks in request/completion order.
+    for request_id, output_ids in server_state["completed"].items():
+        for token_id in output_ids:
+            token_text = vocab["id_to_token"][token_id]
+            chunks.append(
+                format_stream_chunk(
+                    request_id,
+                    token_id,
+                    token_text,
+                    token_id == output_ids[-1],
+                )
+            )
+
+    return chunks
 
 # Step 45 - collect_request_output (not yet solved)
 # TODO: implement
