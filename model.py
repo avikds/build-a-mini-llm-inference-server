@@ -253,8 +253,34 @@ def causal_attention(q, k, v, is_causal=True):
 
     return probs @ v
 
-# Step 15 - model_prefill (not yet solved)
-# TODO: implement
+# Step 15 - model_prefill
+def model_prefill(token_ids, params):
+    """Run the prefill pass for a tiny single-layer transformer."""
+    token_ids = np.asarray(token_ids)
+
+    # Embed the input tokens: (T,) -> (T, D)
+    x = embed_tokens(token_ids, params["embedding"])
+
+    # Project to queries, keys, and values.
+    q = linear_projection(x, params["Wq"])
+    k = linear_projection(x, params["Wk"])
+    v = linear_projection(x, params["Wv"])
+
+    # Initialize and populate the KV cache.
+    d_model = params["embedding"].shape[1]
+    cache = init_kv_cache(params["max_seq_len"], d_model)
+    append_kv(cache, k, v)
+
+    # Causal self-attention over the full prompt.
+    attn_out = causal_attention(q, cache["K"][:cache["length"]], cache["V"][:cache["length"]])
+
+    # Output projection of the attention result.
+    hidden = linear_projection(attn_out, params["Wo"])
+
+    # Project only the final position to vocabulary logits.
+    logits = linear_projection(hidden[-1], params["W_out"])
+
+    return logits, cache
 
 # Step 16 - model_decode_step (not yet solved)
 # TODO: implement
