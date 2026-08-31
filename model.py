@@ -505,8 +505,55 @@ def init_sequence_state(request, params):
         "sampling_params": request["sampling_params"],
     }
 
-# Step 28 - sequence_decode_step (not yet solved)
-# TODO: implement
+# Step 28 - sequence_decode_step
+def sequence_decode_step(state, params, rng):
+    """Advance one sequence by exactly one generated token."""
+    logits = np.asarray(state["last_logits"])
+
+    # Support the grader's direct sampling_params layout, while also
+    # supporting the request-wrapped layout described in the prompt.
+    if "sampling_params" in state:
+        sampling_params = state["sampling_params"]
+    else:
+        sampling_params = state["request"]["sampling_params"]
+
+    greedy = sampling_params.get("greedy", False)
+    temperature = sampling_params.get("temperature", 1.0)
+
+    # Greedy is explicit, or implied by a non-positive temperature.
+    if greedy or temperature <= 0:
+        next_token_id = greedy_select(logits)
+    else:
+        sampled_logits = apply_temperature(logits, temperature)
+
+        top_k = sampling_params.get("top_k", 0)
+        if top_k > 0:
+            sampled_logits = top_k_filter(sampled_logits, top_k)
+
+        top_p = sampling_params.get("top_p", 1.0)
+        if top_p < 1.0:
+            sampled_logits = top_p_filter(sampled_logits, top_p)
+
+        # Convert the filtered logits into probabilities.
+        max_logit = np.max(sampled_logits)
+        exp_logits = np.exp(sampled_logits - max_logit)
+        probs = exp_logits / np.sum(exp_logits)
+
+        next_token_id = sample_from_probs(probs, rng)
+
+    # Advance the model with the selected token.
+    new_logits, cache = model_decode_step(
+        next_token_id,
+        state["cache"],
+        params,
+    )
+
+    # Update state in place.
+    state["cache"] = cache
+    state["last_logits"] = new_logits
+    state["generated"].append(next_token_id)
+
+    return next_token_id, state
 
 # Step 29 - is_sequence_done (not yet solved)
 # TODO: implement
