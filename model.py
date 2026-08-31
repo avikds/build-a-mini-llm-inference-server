@@ -144,8 +144,25 @@ def build_vocab(corpus, special_tokens):
         "id_to_token": tokens,
     }
 
-# Step 8 - encode_prompt (not yet solved)
-# TODO: implement
+# Step 8 - encode_prompt
+def encode_prompt(text, vocab, add_bos=True):
+    """Encode a raw string into a flat list of token ids."""
+    token_to_id = vocab["token_to_id"]
+
+    token_ids = []
+
+    if add_bos and "<bos>" in token_to_id:
+        token_ids.append(token_to_id["<bos>"])
+
+    unk_id = token_to_id.get("<unk>")
+
+    for char in text:
+        if char in token_to_id:
+            token_ids.append(token_to_id[char])
+        elif unk_id is not None:
+            token_ids.append(unk_id)
+
+    return token_ids
 
 # Step 9 - decode_tokens (not yet solved)
 # TODO: implement
