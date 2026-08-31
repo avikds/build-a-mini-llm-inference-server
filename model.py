@@ -1042,8 +1042,42 @@ def select_admissions(waiting_heap, allocator, block_size, max_admit):
 
     return admitted
 
-# Step 40 - preempt_sequence (not yet solved)
-# TODO: implement
+# Step 40 - preempt_sequence
+def preempt_sequence(sequence, allocator, waiting_heap):
+    """Evict a sequence, release its KV blocks, and re-enqueue its request."""
+    seq_id = sequence["request_id"]
+
+    # Get the blocks actually owned by this sequence.
+    blocks = allocator.get("seq_tables", {}).get(seq_id, [])
+
+    # Release all owned blocks.
+    for block_id in blocks:
+        free_block(allocator, block_id)
+
+    # Remove the sequence from the allocator's sequence table.
+    if "seq_tables" in allocator:
+        allocator["seq_tables"].pop(seq_id, None)
+
+    # Remove length bookkeeping if present.
+    if "seq_lengths" in allocator:
+        allocator["seq_lengths"].pop(seq_id, None)
+
+    # Rebuild the request record using the expected field names.
+    request = {
+        "request_id": sequence["request_id"],
+        "prompt_token_ids": list(sequence["prompt_token_ids"]),
+        "max_new_tokens": sequence["max_new_tokens"],
+        "priority": sequence["priority"],
+    }
+
+    # Re-enqueue at the original priority.
+    priority_queue_push(
+        waiting_heap,
+        request["priority"],
+        request,
+    )
+
+    return request
 
 # Step 41 - schedule_step (not yet solved)
 # TODO: implement
