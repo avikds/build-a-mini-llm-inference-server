@@ -207,8 +207,21 @@ def init_kv_cache(max_seq_len, d_model):
         "length": 0,
     }
 
-# Step 13 - append_kv (not yet solved)
-# TODO: implement
+# Step 13 - append_kv
+def append_kv(cache, k_new, v_new):
+    """Append new key/value rows to a contiguous KV cache in place."""
+    k_new = np.asarray(k_new)
+    v_new = np.asarray(v_new)
+
+    start = cache["length"]
+    t = k_new.shape[0]
+    end = start + t
+
+    cache["K"][start:end] = k_new
+    cache["V"][start:end] = v_new
+    cache["length"] = end
+
+    return cache
 
 # Step 14 - causal_attention (not yet solved)
 # TODO: implement
