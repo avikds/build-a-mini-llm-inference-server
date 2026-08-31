@@ -997,8 +997,14 @@ def priority_queue_push(heap, priority, request):
 
     return heap
 
-# Step 38 - priority_queue_pop (not yet solved)
-# TODO: implement
+# Step 38 - priority_queue_pop
+def priority_queue_pop(heap):
+    """Pop and return the highest-priority request from the min-heap."""
+    if not heap:
+        return None
+
+    _, _, request = heapq.heappop(heap)
+    return request
 
 # Step 39 - select_admissions (not yet solved)
 # TODO: implement
