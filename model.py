@@ -404,8 +404,26 @@ def append_to_paged_cache(allocator, seq_id, k_new, v_new):
 
     return None
 
-# Step 22 - gather_kv_from_blocks (not yet solved)
-# TODO: implement
+# Step 22 - gather_kv_from_blocks
+def gather_kv_from_blocks(allocator, seq_id):
+    """Reconstruct contiguous K and V arrays from a sequence's paged blocks."""
+    blocks = allocator["seq_tables"][seq_id]
+    length = allocator["seq_lengths"][seq_id]
+    block_size = allocator["block_size"]
+    d_model = allocator["d_model"]
+
+    K = np.empty((length, d_model), dtype=np.float32)
+    V = np.empty((length, d_model), dtype=np.float32)
+
+    for pos in range(length):
+        block_idx = pos // block_size
+        offset = pos % block_size
+        block_id = blocks[block_idx]
+
+        K[pos] = allocator["K_blocks"][block_id, offset]
+        V[pos] = allocator["V_blocks"][block_id, offset]
+
+    return K, V
 
 # Step 23 - paged_attention_step (not yet solved)
 # TODO: implement
