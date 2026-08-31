@@ -1006,8 +1006,41 @@ def priority_queue_pop(heap):
     _, _, request = heapq.heappop(heap)
     return request
 
-# Step 39 - select_admissions (not yet solved)
-# TODO: implement
+# Step 39 - select_admissions
+def select_admissions(waiting_heap, allocator, block_size, max_admit):
+    """Admit high-priority requests while reserving their required KV blocks."""
+    admitted = []
+
+    while waiting_heap and len(admitted) < max_admit:
+        _, _, request = waiting_heap[0]
+
+        required_blocks = blocks_needed(
+            len(request["prompt_token_ids"]),
+            block_size,
+        )
+
+        # Strict priority: don't bypass a request that currently cannot fit.
+        if not has_free_capacity(allocator, required_blocks):
+            break
+
+        # Remove the request from the waiting heap.
+        priority_queue_pop(waiting_heap)
+
+        # Reserve the blocks immediately.
+        block_ids = []
+        for _ in range(required_blocks):
+            block_ids.append(allocator["free_list"].pop())
+
+        # Full paged allocators have seq_tables; minimal test allocators may not.
+        if "seq_tables" in allocator:
+            allocator["seq_tables"].setdefault(
+                request["request_id"],
+                [],
+            ).extend(block_ids)
+
+        admitted.append(request)
+
+    return admitted
 
 # Step 40 - preempt_sequence (not yet solved)
 # TODO: implement
