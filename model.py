@@ -1118,8 +1118,15 @@ def schedule_step(
         "newly_admitted": newly_admitted,
     }
 
-# Step 42 - format_stream_chunk (not yet solved)
-# TODO: implement
+# Step 42 - format_stream_chunk
+def format_stream_chunk(request_id, token_id, token_text, finished):
+    """Package a single generated token into a streaming response chunk."""
+    return {
+        "request_id": request_id,
+        "token_id": token_id,
+        "text": token_text,
+        "finished": finished,
+    }
 
 # Step 43 - submit_request (not yet solved)
 # TODO: implement
