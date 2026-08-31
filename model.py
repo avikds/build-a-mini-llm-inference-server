@@ -188,8 +188,15 @@ def embed_tokens(token_ids, embedding_matrix):
 
     return embedding_matrix[token_ids]
 
-# Step 11 - linear_projection (not yet solved)
-# TODO: implement
+# Step 11 - linear_projection
+def linear_projection(x, weight, bias=None):
+    """Apply an affine transformation: y = x @ weight + bias."""
+    y = np.asarray(x) @ np.asarray(weight)
+
+    if bias is not None:
+        y = y + np.asarray(bias)
+
+    return y
 
 # Step 12 - init_kv_cache (not yet solved)
 # TODO: implement
