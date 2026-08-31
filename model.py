@@ -223,8 +223,35 @@ def append_kv(cache, k_new, v_new):
 
     return cache
 
-# Step 14 - causal_attention (not yet solved)
-# TODO: implement
+# Step 14 - causal_attention
+def causal_attention(q, k, v, is_causal=True):
+    """Compute scaled dot-product attention with an optional causal mask."""
+    q = np.asarray(q)
+    k = np.asarray(k)
+    v = np.asarray(v)
+
+    tq, d = q.shape
+    tk = k.shape[0]
+
+    # Scaled attention scores.
+    scores = (q @ k.T) / np.sqrt(d)
+
+    if is_causal:
+        # Query position i may attend to keys j <= i + (Tk - Tq).
+        offset = tk - tq
+        query_positions = np.arange(tq)[:, None]
+        key_positions = np.arange(tk)[None, :]
+
+        mask = key_positions > (query_positions + offset)
+        scores = scores.copy()
+        scores[mask] = -np.inf
+
+    # Stable row-wise softmax.
+    max_scores = np.max(scores, axis=-1, keepdims=True)
+    exp_scores = np.exp(scores - max_scores)
+    probs = exp_scores / np.sum(exp_scores, axis=-1, keepdims=True)
+
+    return probs @ v
 
 # Step 15 - model_prefill (not yet solved)
 # TODO: implement
