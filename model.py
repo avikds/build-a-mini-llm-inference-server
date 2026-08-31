@@ -739,8 +739,92 @@ def has_free_capacity(allocator, required_blocks):
     """Return True when enough KV blocks are currently free."""
     return len(allocator["free_list"]) >= required_blocks
 
-# Step 35 - continuous_batch_step (not yet solved)
-# TODO: implement
+# Step 35 - continuous_batch_step
+import numpy as np
+
+
+def continuous_batch_step(params, running, allocator, sampling_config):
+    """Advance every active sequence by one decoded token using the paged allocator."""
+    eos_token_id = sampling_config.get("eos_token_id", None)
+
+    for seq in running:
+        if seq["done"]:
+            continue
+
+        # Use the most recently available token as the decode input.
+        token_id = seq["token_ids"][-1]
+
+        # Embed the token and compute Q/K/V.
+        x = embed_tokens(
+            np.array([token_id]),
+            params["embedding"],
+        )
+        q = linear_projection(x, params["Wq"])
+        k = linear_projection(x, params["Wk"])
+        v = linear_projection(x, params["Wv"])
+
+        # Append the new K/V row to this sequence's paged cache.
+        append_to_paged_cache(
+            allocator,
+            seq["request_id"],
+            k,
+            v,
+        )
+
+        # Run attention over all cached positions for this sequence.
+        attn_out = paged_attention_step(
+            q,
+            allocator,
+            seq["request_id"],
+        )
+
+        # Output projection followed by vocabulary projection.
+        hidden = linear_projection(attn_out, params["Wo"])
+        logits = linear_projection(hidden[0], params["W_out"])
+
+        # Sample the next token.
+        greedy = sampling_config.get("greedy", False)
+        temperature = sampling_config.get("temperature", 1.0)
+
+        if greedy or temperature <= 0:
+            next_token_id = greedy_select(logits)
+        else:
+            sampled_logits = apply_temperature(logits, temperature)
+
+            top_k = sampling_config.get("top_k", 0)
+            if top_k > 0:
+                sampled_logits = top_k_filter(sampled_logits, top_k)
+
+            top_p = sampling_config.get("top_p", 1.0)
+            if top_p < 1.0:
+                sampled_logits = top_p_filter(sampled_logits, top_p)
+
+            max_logit = np.max(sampled_logits)
+            probs = np.exp(sampled_logits - max_logit)
+            probs /= np.sum(probs)
+
+            rng = sampling_config.get("rng")
+            if rng is None:
+                rng = np.random.default_rng()
+
+            next_token_id = sample_from_probs(probs, rng)
+
+        # Record the generated token.
+        seq["token_ids"].append(next_token_id)
+        seq["generated"].append(next_token_id)
+        seq["length"] = seq.get("length", 0) + 1
+
+        # Update completion status.
+        if (
+            len(seq["generated"]) >= seq["max_new_tokens"]
+            or (
+                eos_token_id is not None
+                and next_token_id == eos_token_id
+            )
+        ):
+            seq["done"] = True
+
+    return running
 
 # Step 36 - run_continuous_batching (not yet solved)
 # TODO: implement
