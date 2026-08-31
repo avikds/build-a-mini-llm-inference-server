@@ -123,8 +123,26 @@ def greedy_select(logits):
 
     return int(np.argmax(logits))
 
-# Step 7 - build_vocab (not yet solved)
-# TODO: implement
+# Step 7 - build_vocab
+def build_vocab(corpus, special_tokens):
+    """Build a tiny character-level vocabulary."""
+    # Preserve special-token order while removing duplicates.
+    specials = list(dict.fromkeys(special_tokens))
+
+    # Collect all unique characters from the corpus.
+    unique_chars = set()
+    for text in corpus:
+        unique_chars.update(text)
+
+    # Special tokens occupy the lowest ids; characters follow in sorted order.
+    tokens = specials + sorted(unique_chars - set(specials))
+
+    token_to_id = {token: idx for idx, token in enumerate(tokens)}
+
+    return {
+        "token_to_id": token_to_id,
+        "id_to_token": tokens,
+    }
 
 # Step 8 - encode_prompt (not yet solved)
 # TODO: implement
