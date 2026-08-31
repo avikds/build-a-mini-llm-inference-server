@@ -109,8 +109,12 @@ def top_p_filter(logits, p):
 
     return output
 
-# Step 5 - sample_from_probs (not yet solved)
-# TODO: implement
+# Step 5 - sample_from_probs
+def sample_from_probs(probs, rng):
+    """Draw a single token id from a categorical distribution."""
+    probs = np.asarray(probs)
+
+    return int(rng.choice(len(probs), p=probs))
 
 # Step 6 - greedy_select (not yet solved)
 # TODO: implement
