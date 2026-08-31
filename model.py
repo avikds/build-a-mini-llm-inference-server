@@ -983,8 +983,19 @@ def run_continuous_batching(
 
     return completed
 
-# Step 37 - priority_queue_push (not yet solved)
-# TODO: implement
+# Step 37 - priority_queue_push
+import heapq
+
+def priority_queue_push(heap, priority, request):
+    """Push a request onto a min-heap with stable FIFO tie-breaking."""
+    if heap:
+        counter = max(entry[1] for entry in heap) + 1
+    else:
+        counter = 0
+
+    heapq.heappush(heap, (priority, counter, request))
+
+    return heap
 
 # Step 38 - priority_queue_pop (not yet solved)
 # TODO: implement
