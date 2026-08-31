@@ -444,8 +444,24 @@ def paged_attention_step(q, allocator, seq_id):
 
     return probs @ V
 
-# Step 24 - free_sequence_blocks (not yet solved)
-# TODO: implement
+# Step 24 - free_sequence_blocks
+def free_sequence_blocks(allocator, seq_id):
+    """Release all blocks owned by a sequence and remove its seq-table entry."""
+    if seq_id not in allocator["seq_tables"]:
+        return None
+
+    blocks = allocator["seq_tables"][seq_id]
+
+    for block_id in blocks:
+        free_block(allocator, block_id)
+
+    del allocator["seq_tables"][seq_id]
+
+    # Remove the sequence length entry as well, when present.
+    if "seq_lengths" in allocator:
+        allocator["seq_lengths"].pop(seq_id, None)
+
+    return None
 
 # Step 25 - kv_blocks_in_use (not yet solved)
 # TODO: implement
