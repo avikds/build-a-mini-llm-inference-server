@@ -282,8 +282,35 @@ def model_prefill(token_ids, params):
 
     return logits, cache
 
-# Step 16 - model_decode_step (not yet solved)
-# TODO: implement
+# Step 16 - model_decode_step
+def model_decode_step(token_id, cache, params):
+    """Advance generation by one token using the existing KV cache."""
+    # Embed the incoming token.
+    x = embed_tokens(np.array([token_id]), params["embedding"])
+
+    # Compute query, key, and value.
+    q = linear_projection(x, params["Wq"])
+    k = linear_projection(x, params["Wk"])
+    v = linear_projection(x, params["Wv"])
+
+    # Append the new K/V row to the existing cache.
+    append_kv(cache, k, v)
+
+    # The decode query attends to all cached positions.
+    attn_out = causal_attention(
+        q,
+        cache["K"][:cache["length"]],
+        cache["V"][:cache["length"]],
+        is_causal=True,
+    )
+
+    # Output projection.
+    hidden = linear_projection(attn_out, params["Wo"])
+
+    # Vocabulary logits from the single decode position.
+    logits = linear_projection(hidden[0], params["W_out"])
+
+    return logits, cache
 
 # Step 17 - blocks_needed (not yet solved)
 # TODO: implement
