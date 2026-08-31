@@ -10,12 +10,14 @@ import numpy as np
 import numpy as np
 
 def stable_softmax(logits):
-    # Subtract the maximum logit along the last axis to prevent
-    # overflow when computing exp().
-    logits = np.asarray(logits)
-    max_logits = np.max(logits, axis=-1, keepdims=True)
+    """Compute a numerically stable softmax over the last axis."""
+    logits = np.asarray(logits, dtype=np.float64)
 
+    # Subtract the maximum logit to prevent overflow in exp().
+    max_logits = np.max(logits, axis=-1, keepdims=True)
     exp_logits = np.exp(logits - max_logits)
+
+    # Normalize over the last axis.
     return exp_logits / np.sum(exp_logits, axis=-1, keepdims=True)
 
 # Step 2 - apply_temperature
