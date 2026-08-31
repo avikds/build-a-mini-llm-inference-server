@@ -21,8 +21,14 @@ def stable_softmax(logits):
     exp_logits = np.exp(shifted_logits)
     return exp_logits / np.sum(exp_logits, axis=-1, keepdims=True)
 
-# Step 2 - apply_temperature (not yet solved)
-# TODO: implement
+# Step 2 - apply_temperature
+def apply_temperature(logits, temperature):
+    # For temperature <= 0, preserve the logits for greedy decoding.
+    if temperature <= 0:
+        return logits
+
+    # Higher temperature flattens the distribution; lower temperature sharpens it.
+    return logits / temperature
 
 # Step 3 - top_k_filter (not yet solved)
 # TODO: implement
