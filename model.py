@@ -425,8 +425,24 @@ def gather_kv_from_blocks(allocator, seq_id):
 
     return K, V
 
-# Step 23 - paged_attention_step (not yet solved)
-# TODO: implement
+# Step 23 - paged_attention_step
+def paged_attention_step(q, allocator, seq_id):
+    """Run decode-time scaled dot-product attention against a paged KV cache."""
+    q = np.asarray(q)
+
+    # Reconstruct the sequence's contiguous K/V cache.
+    K, V = gather_kv_from_blocks(allocator, seq_id)
+
+    # A single decode query may attend to every cached position.
+    d_model = q.shape[-1]
+    scores = (q @ K.T) / np.sqrt(d_model)
+
+    # Numerically stable softmax over the key/token dimension.
+    max_scores = np.max(scores, axis=-1, keepdims=True)
+    exp_scores = np.exp(scores - max_scores)
+    probs = exp_scores / np.sum(exp_scores, axis=-1, keepdims=True)
+
+    return probs @ V
 
 # Step 24 - free_sequence_blocks (not yet solved)
 # TODO: implement
