@@ -164,8 +164,22 @@ def encode_prompt(text, vocab, add_bos=True):
 
     return token_ids
 
-# Step 9 - decode_tokens (not yet solved)
-# TODO: implement
+# Step 9 - decode_tokens
+def decode_tokens(token_ids, vocab, skip_special=True):
+    """Convert token ids back into a string."""
+    id_to_token = vocab["id_to_token"]
+
+    tokens = []
+
+    for token_id in token_ids:
+        token = id_to_token[int(token_id)]
+
+        if skip_special and token.startswith("<") and token.endswith(">"):
+            continue
+
+        tokens.append(token)
+
+    return "".join(tokens)
 
 # Step 10 - embed_tokens (not yet solved)
 # TODO: implement
