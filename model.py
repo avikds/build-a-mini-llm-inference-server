@@ -648,8 +648,91 @@ def batched_decode_step(params, sequences, sampling_config):
 
     return sequences
 
-# Step 33 - static_batch_generate (not yet solved)
-# TODO: implement
+# Step 33 - static_batch_generate
+def static_batch_generate(params, requests, sampling_config, max_new_tokens):
+    """Run synchronized batched generation across all requests."""
+    sequences = []
+
+    if not requests:
+        return []
+
+    for request in requests:
+        effective_max = min(
+            request["max_new_tokens"],
+            max_new_tokens,
+        )
+
+        logits, cache = model_prefill(
+            request["prompt_token_ids"],
+            params,
+        )
+
+        sequences.append({
+            "request_id": request["request_id"],
+            "token_ids": list(request["prompt_token_ids"]),
+            "generated": [],
+            "kv_cache": cache,
+            "last_logits": logits,
+            "done": effective_max <= 0,
+            "max_new_tokens": effective_max,
+            "sampling_params": request.get("sampling_params", {}),
+        })
+
+    while any(not seq["done"] for seq in sequences):
+        for seq in sequences:
+            if seq["done"]:
+                continue
+
+            sampling_params = dict(sampling_config)
+            sampling_params.update(seq["sampling_params"])
+
+            logits = seq["last_logits"]
+            temperature = sampling_params.get("temperature", 1.0)
+            greedy = sampling_params.get("greedy", False)
+
+            if greedy or temperature <= 0:
+                next_token_id = greedy_select(logits)
+            else:
+                sampled_logits = apply_temperature(logits, temperature)
+
+                top_k = sampling_params.get("top_k", 0)
+                if top_k > 0:
+                    sampled_logits = top_k_filter(sampled_logits, top_k)
+
+                top_p = sampling_params.get("top_p", 1.0)
+                if top_p < 1.0:
+                    sampled_logits = top_p_filter(sampled_logits, top_p)
+
+                max_logit = np.max(sampled_logits)
+                probs = np.exp(sampled_logits - max_logit)
+                probs /= np.sum(probs)
+
+                rng = sampling_params.get("rng")
+                if rng is None:
+                    rng = np.random.default_rng()
+
+                next_token_id = sample_from_probs(probs, rng)
+
+            seq["token_ids"].append(next_token_id)
+            seq["generated"].append(next_token_id)
+
+            next_logits, seq["kv_cache"] = model_decode_step(
+                next_token_id,
+                seq["kv_cache"],
+                params,
+            )
+            seq["last_logits"] = next_logits
+
+            if len(seq["generated"]) >= seq["max_new_tokens"]:
+                seq["done"] = True
+
+    return [
+        {
+            "request_id": seq["request_id"],
+            "output_ids": list(seq["generated"]),
+        }
+        for seq in sequences
+    ]
 
 # Step 34 - has_free_capacity (not yet solved)
 # TODO: implement
