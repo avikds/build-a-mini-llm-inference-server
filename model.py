@@ -1128,8 +1128,33 @@ def format_stream_chunk(request_id, token_id, token_text, finished):
         "finished": finished,
     }
 
-# Step 43 - submit_request (not yet solved)
-# TODO: implement
+# Step 43 - submit_request
+def submit_request(server_state, prompt, max_new_tokens, priority, vocab):
+    """Encode and enqueue a new generation request."""
+    request_id = f"req-{server_state['next_request_id']}"
+    server_state["next_request_id"] += 1
+
+    prompt_token_ids = encode_prompt(
+        prompt,
+        vocab,
+    )
+
+    request = make_request(
+        request_id,
+        prompt_token_ids,
+        max_new_tokens,
+        {},
+    )
+
+    request["priority"] = priority
+
+    priority_queue_push(
+        server_state["waiting_heap"],
+        priority,
+        request,
+    )
+
+    return request_id
 
 # Step 44 - drive_until_complete (not yet solved)
 # TODO: implement
