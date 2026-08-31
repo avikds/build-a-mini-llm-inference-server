@@ -740,9 +740,6 @@ def has_free_capacity(allocator, required_blocks):
     return len(allocator["free_list"]) >= required_blocks
 
 # Step 35 - continuous_batch_step
-import numpy as np
-
-
 def continuous_batch_step(params, running, allocator, sampling_config):
     """Advance every active sequence by one decoded token using the paged allocator."""
     eos_token_id = sampling_config.get("eos_token_id", None)
