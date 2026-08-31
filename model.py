@@ -823,8 +823,165 @@ def continuous_batch_step(params, running, allocator, sampling_config):
 
     return running
 
-# Step 36 - run_continuous_batching (not yet solved)
-# TODO: implement
+# Step 36 - run_continuous_batching
+def run_continuous_batching(
+    params,
+    requests,
+    allocator,
+    sampling_config,
+    max_steps,
+):
+    """Drive continuous-batching generation with paged KV-cache scheduling."""
+    if not requests:
+        return []
+
+    waiting = list(requests)
+    running = []
+    completed = []
+
+    if "seq_lengths" not in allocator:
+        allocator["seq_lengths"] = {}
+
+    rng = sampling_config.get("rng")
+    if rng is None:
+        rng = np.random.default_rng()
+
+    # Admit requests and perform prefill.
+    for request in waiting:
+        if max_steps < 0:
+            break
+
+        request_id = request["request_id"]
+        prompt_token_ids = list(request["prompt_token_ids"])
+        prompt_len = len(prompt_token_ids)
+
+        # Check how many paged blocks the prompt requires.
+        required_blocks = blocks_needed(
+            prompt_len,
+            allocator["block_size"],
+        )
+
+        if not has_free_capacity(allocator, required_blocks):
+            break
+
+        # Compute prompt embeddings and Q/K/V directly.
+        x = embed_tokens(
+            np.asarray(prompt_token_ids, dtype=np.int64),
+            params["embedding"],
+        )
+
+        q = linear_projection(x, params["Wq"])
+        k = linear_projection(x, params["Wk"])
+        v = linear_projection(x, params["Wv"])
+
+        # Compute the prefill attention and next-token logits.
+        attn_out = causal_attention(
+            q,
+            k,
+            v,
+            is_causal=True,
+        )
+        hidden = linear_projection(attn_out, params["Wo"])
+        last_logits = linear_projection(
+            hidden[-1],
+            params["W_out"],
+        )
+
+        # Initialize this sequence in the paged allocator.
+        allocator["seq_tables"][request_id] = []
+        allocator["seq_lengths"][request_id] = 0
+
+        if prompt_len > 0:
+            append_to_paged_cache(
+                allocator,
+                request_id,
+                k,
+                v,
+            )
+
+        effective_max = request["max_new_tokens"]
+
+        seq = {
+            "request_id": request_id,
+            "token_ids": prompt_token_ids,
+            "generated": [],
+            "length": prompt_len,
+            "done": effective_max <= 0,
+            "max_new_tokens": effective_max,
+            "last_logits": last_logits,
+        }
+
+        if seq["done"]:
+            completed.append({
+                "request_id": request_id,
+                "output_ids": [],
+            })
+            free_sequence_blocks(allocator, request_id)
+        else:
+            running.append(seq)
+
+    # Decode continuously, one synchronized step at a time.
+    steps = 0
+
+    while running and steps < max_steps:
+        config = dict(sampling_config)
+        config["rng"] = rng
+
+        continuous_batch_step(
+            params,
+            running,
+            allocator,
+            config,
+        )
+
+        steps += 1
+
+        # Retire sequences that have finished.
+        survivors = []
+
+        for seq in running:
+            if seq["done"]:
+                completed.append({
+                    "request_id": seq["request_id"],
+                    "output_ids": list(seq["generated"]),
+                })
+
+                free_sequence_blocks(
+                    allocator,
+                    seq["request_id"],
+                )
+            else:
+                survivors.append(seq)
+
+        running = survivors
+
+    # If max_steps is reached, return partial results for all sequences
+    # that were actually admitted.
+    for seq in running:
+        completed.append({
+            "request_id": seq["request_id"],
+            "output_ids": list(seq["generated"]),
+        })
+
+        free_sequence_blocks(
+            allocator,
+            seq["request_id"],
+        )
+
+    # Preserve the input request order.
+    request_order = {
+        request["request_id"]: i
+        for i, request in enumerate(requests)
+    }
+
+    completed.sort(
+        key=lambda item: request_order.get(
+            item["request_id"],
+            len(request_order),
+        )
+    )
+
+    return completed
 
 # Step 37 - priority_queue_push (not yet solved)
 # TODO: implement
