@@ -10,15 +10,12 @@ import numpy as np
 import numpy as np
 
 def stable_softmax(logits):
-    # Convert to a NumPy array so the function also works with lists.
+    # Subtract the maximum logit along the last axis to prevent
+    # overflow when computing exp().
     logits = np.asarray(logits)
-
-    # Subtract the maximum value along the last axis before exponentiation.
-    # This does not change the softmax probabilities but prevents overflow.
     max_logits = np.max(logits, axis=-1, keepdims=True)
-    shifted_logits = logits - max_logits
 
-    exp_logits = np.exp(shifted_logits)
+    exp_logits = np.exp(logits - max_logits)
     return exp_logits / np.sum(exp_logits, axis=-1, keepdims=True)
 
 # Step 2 - apply_temperature
@@ -30,8 +27,35 @@ def apply_temperature(logits, temperature):
     # Higher temperature flattens the distribution; lower temperature sharpens it.
     return logits / temperature
 
-# Step 3 - top_k_filter (not yet solved)
-# TODO: implement
+# Step 3 - top_k_filter
+def top_k_filter(logits, k):
+    """Mask logits outside the top-k per row to -inf."""
+
+    logits = np.asarray(logits)
+    vocab_size = logits.shape[-1]
+
+    # Keep all logits when k covers the whole vocabulary.
+    if k >= vocab_size:
+        return logits.copy()
+
+    # k <= 0 means no logits are kept.
+    result = np.full_like(logits, -np.inf)
+
+    if k <= 0:
+        return result
+
+    # Find the indices of the k largest logits along the last axis.
+    top_k_indices = np.argpartition(logits, -k, axis=-1)[..., -k:]
+
+    # Copy the original values of the selected logits.
+    np.put_along_axis(
+        result,
+        top_k_indices,
+        np.take_along_axis(logits, top_k_indices, axis=-1),
+        axis=-1,
+    )
+
+    return result
 
 # Step 4 - top_p_filter (not yet solved)
 # TODO: implement
