@@ -1079,8 +1079,44 @@ def preempt_sequence(sequence, allocator, waiting_heap):
 
     return request
 
-# Step 41 - schedule_step (not yet solved)
-# TODO: implement
+# Step 41 - schedule_step
+def schedule_step(
+    waiting_heap,
+    running,
+    allocator,
+    block_size,
+    max_running,
+):
+    """Run one scheduler iteration: preempt excess, then admit new requests."""
+    running = list(running)
+
+    # Enforce the maximum number of running sequences.
+    while len(running) > max_running:
+        sequence = running.pop()
+
+        preempt_sequence(
+            sequence,
+            allocator,
+            waiting_heap,
+        )
+
+    # Admit as many waiting requests as the remaining capacity allows.
+    available_slots = max_running - len(running)
+
+    if available_slots > 0:
+        newly_admitted = select_admissions(
+            waiting_heap,
+            allocator,
+            block_size,
+            available_slots,
+        )
+    else:
+        newly_admitted = []
+
+    return {
+        "running": running,
+        "newly_admitted": newly_admitted,
+    }
 
 # Step 42 - format_stream_chunk (not yet solved)
 # TODO: implement
