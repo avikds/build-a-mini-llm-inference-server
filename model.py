@@ -1166,29 +1166,23 @@ def drive_until_complete(
     max_steps,
 ):
     """Drive the server scheduler until requests complete or max_steps is reached."""
-    # Ensure the canonical server-state containers exist.
     server_state.setdefault("waiting_heap", [])
     server_state.setdefault("running", [])
     server_state.setdefault("completed", {})
     server_state.setdefault("streams", {})
 
-    # Nothing to do.
     if max_steps <= 0:
         return []
 
     chunks = []
 
     for _ in range(max_steps):
-        # Admit waiting requests and enforce the running cap.
         max_running = server_state.get(
             "max_running",
             len(server_state["waiting_heap"]) + len(server_state["running"]) or 1,
         )
 
-        block_size = allocator.get(
-            "block_size",
-            1,
-        )
+        block_size = allocator.get("block_size", 1)
 
         schedule = schedule_step(
             server_state["waiting_heap"],
@@ -1201,20 +1195,35 @@ def drive_until_complete(
         server_state["running"] = schedule["running"]
         newly_admitted = schedule["newly_admitted"]
 
-        # Initialize newly admitted sequences.
+        # Prefill newly admitted requests.
         for request in newly_admitted:
             request_id = request["request_id"]
-
             prompt_ids = request.get(
                 "prompt_token_ids",
                 request.get("prompt_ids", []),
             )
 
-            # If the allocator blocks were reserved by select_admissions,
-            # recreate the sequence state for subsequent decode steps.
-            logits, cache = model_prefill(
-                prompt_ids,
-                params,
+            # The admission step has already reserved blocks. We need the
+            # model's logits for the prompt, while keeping the paged allocator
+            # as the authoritative KV storage.
+            x = embed_tokens(
+                np.asarray(prompt_ids, dtype=np.int64),
+                params["embedding"],
+            )
+            q = linear_projection(x, params["Wq"])
+            k = linear_projection(x, params["Wk"])
+            v = linear_projection(x, params["Wv"])
+
+            attn_out = causal_attention(
+                q,
+                k,
+                v,
+                is_causal=True,
+            )
+            hidden = linear_projection(attn_out, params["Wo"])
+            last_logits = linear_projection(
+                hidden[-1],
+                params["W_out"],
             )
 
             server_state["running"].append({
@@ -1227,22 +1236,25 @@ def drive_until_complete(
                 "prompt_token_ids": list(prompt_ids),
                 "max_new_tokens": request["max_new_tokens"],
                 "priority": request.get("priority", 0),
-                "last_logits": logits,
-                "cache": cache,
+                "last_logits": last_logits,
                 "done": request["max_new_tokens"] <= 0,
             })
 
+        # Nothing is running.
         if not server_state["running"]:
             if not server_state["waiting_heap"]:
                 break
             continue
 
-        # Advance the active sequences.
         config = dict(sampling_config)
-        if "rng" not in config:
-            import numpy as np
-            config["rng"] = np.random.default_rng()
 
+        if "rng" not in config:
+            config["rng"] = server_state.get(
+                "rng",
+                np.random.default_rng(),
+            )
+
+        # Run one decode iteration.
         continuous_batch_step(
             params,
             server_state["running"],
@@ -1250,15 +1262,44 @@ def drive_until_complete(
             config,
         )
 
-        # Retire finished sequences and emit their results.
+        # Retire finished sequences and build completion records.
         survivors = []
 
         for seq in server_state["running"]:
-            if seq["done"]:
-                request_id = seq["request_id"]
-                output_ids = list(seq["generated"])
+            request_id = seq["request_id"]
 
-                server_state["completed"][request_id] = output_ids
+            if seq["done"]:
+                output_ids = list(seq["generated"])
+                request_chunks = []
+
+                for i, token_id in enumerate(output_ids):
+                    token_text = vocab["id_to_token"][token_id]
+                    finished = i == len(output_ids) - 1
+
+                    chunk = format_stream_chunk(
+                        request_id,
+                        token_id,
+                        token_text,
+                        finished,
+                    )
+
+                    request_chunks.append(chunk)
+                    chunks.append(chunk)
+
+                server_state["streams"][request_id] = request_chunks
+
+                # Store the schema expected by collect_request_output().
+                server_state["completed"][request_id] = {
+                    "output_ids": output_ids,
+                    "chunks": request_chunks,
+                    "finish_reason": (
+                        "stop"
+                        if output_ids
+                        and sampling_config.get("eos_token_id") is not None
+                        and output_ids[-1] == sampling_config.get("eos_token_id")
+                        else "length"
+                    ),
+                }
 
                 free_sequence_blocks(
                     allocator,
@@ -1269,19 +1310,8 @@ def drive_until_complete(
 
         server_state["running"] = survivors
 
-    # Return completion chunks in request/completion order.
-    for request_id, output_ids in server_state["completed"].items():
-        for token_id in output_ids:
-            token_text = vocab["id_to_token"][token_id]
-            chunks.append(
-                format_stream_chunk(
-                    request_id,
-                    token_id,
-                    token_text,
-                    token_id == output_ids[-1],
-                )
-            )
-
+    # Return partial results for sequences still running when max_steps
+    # is reached, without marking them as completed.
     return chunks
 
 # Step 45 - collect_request_output
