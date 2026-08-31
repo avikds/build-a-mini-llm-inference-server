@@ -53,8 +53,61 @@ def top_k_filter(logits, k):
 
     return output
 
-# Step 4 - top_p_filter (not yet solved)
-# TODO: implement
+# Step 4 - top_p_filter
+def top_p_filter(logits, p):
+    """Keep the smallest set of tokens whose cumulative probability reaches p."""
+    logits = np.asarray(logits)
+
+    if not (0 < p <= 1):
+        raise ValueError("p must be in the interval (0, 1]")
+
+    original_shape = logits.shape
+
+    # Treat 1D input as a batch of size 1.
+    if logits.ndim == 1:
+        work_logits = logits[None, :]
+    elif logits.ndim == 2:
+        work_logits = logits
+    else:
+        raise ValueError("logits must be 1D or 2D")
+
+    # Stable softmax.
+    max_logits = np.max(work_logits, axis=-1, keepdims=True)
+    exp_logits = np.exp(work_logits - max_logits)
+    probs = exp_logits / np.sum(exp_logits, axis=-1, keepdims=True)
+
+    # Sort probabilities from largest to smallest.
+    sorted_indices = np.argsort(-probs, axis=-1)
+    sorted_probs = np.take_along_axis(probs, sorted_indices, axis=-1)
+
+    # Cumulative probability in descending order.
+    cumulative_probs = np.cumsum(sorted_probs, axis=-1)
+
+    # Keep tokens until cumulative probability reaches p.
+    keep_sorted = cumulative_probs <= p
+
+    # Always keep the first token that crosses the threshold.
+    crossing_index = np.argmax(cumulative_probs >= p, axis=-1)
+    rows = np.arange(work_logits.shape[0])
+    keep_sorted[rows, crossing_index] = True
+
+    # Map the mask back to the original vocabulary order.
+    keep_mask = np.zeros_like(keep_sorted, dtype=bool)
+    np.put_along_axis(
+        keep_mask,
+        sorted_indices,
+        keep_sorted,
+        axis=-1,
+    )
+
+    output = work_logits.copy()
+    output[~keep_mask] = -np.inf
+
+    # Restore the original shape.
+    if len(original_shape) == 1:
+        return output[0]
+
+    return output
 
 # Step 5 - sample_from_probs (not yet solved)
 # TODO: implement
