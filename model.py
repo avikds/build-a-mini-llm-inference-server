@@ -1284,8 +1284,19 @@ def drive_until_complete(
 
     return chunks
 
-# Step 45 - collect_request_output (not yet solved)
-# TODO: implement
+# Step 45 - collect_request_output
+def collect_request_output(server_state, request_id):
+    """Return the completed generation record for a request."""
+    record = server_state.get("completed", {}).get(request_id)
+
+    if record is None:
+        return None
+
+    return {
+        "request_id": request_id,
+        "output_ids": record["output_ids"],
+        "chunks": record["chunks"],
+    }
 
 # Step 46 - build_completion_response (not yet solved)
 # TODO: implement
