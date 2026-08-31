@@ -22,12 +22,11 @@ def stable_softmax(logits):
 
 # Step 2 - apply_temperature
 def apply_temperature(logits, temperature):
-    # For temperature <= 0, preserve the logits for greedy decoding.
+    """Scale logits by 1 / temperature, treating non-positive temperatures as greedy."""
     if temperature <= 0:
         return logits
 
-    # Higher temperature flattens the distribution; lower temperature sharpens it.
-    return logits / temperature
+    return np.asarray(logits) / temperature
 
 # Step 3 - top_k_filter
 def top_k_filter(logits, k):
