@@ -595,8 +595,58 @@ def build_batch_step_input(sequences):
         "input_ids": np.asarray(input_ids, dtype=np.int64),
     }
 
-# Step 32 - batched_decode_step (not yet solved)
-# TODO: implement
+# Step 32 - batched_decode_step
+def batched_decode_step(params, sequences, sampling_config):
+    """Run one synchronized decode step across active sequences."""
+    for seq in sequences:
+        if seq["done"]:
+            continue
+
+        # The most recently generated token is the input to the decode step.
+        token_id = seq["token_ids"][-1]
+
+        # Support the kv_cache naming used by this batched API.
+        cache = seq["kv_cache"]
+
+        # Run one decode forward pass for this sequence.
+        logits, cache = model_decode_step(
+            token_id,
+            cache,
+            params,
+        )
+        seq["kv_cache"] = cache
+
+        # Select the next token according to the shared sampling configuration.
+        greedy = sampling_config.get("greedy", False)
+        temperature = sampling_config.get("temperature", 1.0)
+
+        if greedy or temperature <= 0:
+            next_token_id = greedy_select(logits)
+        else:
+            sampled_logits = apply_temperature(logits, temperature)
+
+            top_k = sampling_config.get("top_k", 0)
+            if top_k > 0:
+                sampled_logits = top_k_filter(sampled_logits, top_k)
+
+            top_p = sampling_config.get("top_p", 1.0)
+            if top_p < 1.0:
+                sampled_logits = top_p_filter(sampled_logits, top_p)
+
+            max_logit = np.max(sampled_logits)
+            probs = np.exp(sampled_logits - max_logit)
+            probs /= np.sum(probs)
+
+            # Use the provided RNG when available; otherwise create one.
+            rng = sampling_config.get("rng")
+            if rng is None:
+                rng = np.random.default_rng()
+
+            next_token_id = sample_from_probs(probs, rng)
+
+        seq["token_ids"].append(next_token_id)
+
+    return sequences
 
 # Step 33 - static_batch_generate (not yet solved)
 # TODO: implement
