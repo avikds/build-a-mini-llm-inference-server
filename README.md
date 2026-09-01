@@ -62,24 +62,6 @@ python scaffold.py
 - [x] **50.** latency_percentiles
 - [x] **51.** run_throughput_latency_benchmark
 
-## Results
+---
 
-```
-[sampling] greedy=4, sampled=4, probs=[0.22270014 0.         0.         0.         0.77729986]
-[vocab] size=31, bos=1, eos=2
-[tokenize] prompt='hello world' ids=[1, 12, 9, 16, 16, 19, 4, 27, 19, 22, 16, 8] roundtrip='hello world'
-[single] generated ids=[13, 7, 12, 13, 12, 7] text='ichihc'
-[allocator] blocks=32, block_size=8, usage={'used': 0, 'free': 32, 'total': 32}
-[server] submitted requests: ['req-0', 'req-1', 'req-2', 'req-3']
-[server] req-0: tokens=[12, 24, 16, 24, 6] text='htltb'
-[server] req-1: tokens=[2, 2, 18, 25, 2] text='nu'
-[server] req-2: tokens=[14, 10, 10, 7, 22] text='jffcr'
-[server] req-3: tokens=[10, 6, 6, 1, 9] text='fbbe'
-[allocator] post-run usage={'used': 0, 'free': 32, 'total': 32}
-[bench] wall=0.0098s report keys=['ttft', 'itl', 'throughput', 'percentiles', 'total_time']
-  ttft: {'req-0': 0.0017524090000000103, 'req-1': 0.0017548290000000133, 'req-2': 0.0017559890000000133}
-  itl: {'req-0': 1.8650000000036693e-06, 'req-1': 1.2300000000048383e-06, 'req-2': 1.2499999999943112e-06}
-  throughput: {'tokens_per_second': 8424.651879343277, 'requests_per_second': 1684.9303758686553, 'total_tokens': 15, 'total_requests': 3}
-  percentiles: {50.0: 0.0017548290000000133, 90.0: 0.0017557570000000134, 99.0: 0.0017559658000000132}
-  total_time: 0.0018
-```
+Built on Deep-ML.
